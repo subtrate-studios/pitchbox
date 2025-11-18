@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI,  UploadFile, File
 from elevenlabs.client import ElevenLabs
 from elevenlabs.play import play
 from tigris import upload_to_tigris, list_and_read_script
@@ -36,6 +36,25 @@ async def generate_audio():
     )
 
     return {"message": "Audio generated and uploaded successfully."}
+
+@app.post("/upload-tigris")
+async def upload_tigris(
+    file: UploadFile = File(...),
+):
+    bucket_name="pitchbox"
+    object_name="script.txt"
+    temp_path = f"./temp_{object_name}"
+    with open(temp_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    success = upload_to_tigris(temp_path, bucket_name, object_name)
+    os.remove(temp_path)
+
+    if success:
+        return {"message": f"{object_name} uploaded successfully to {bucket_name}"}
+    else:
+        return {"message": f"Error uploading {object_name}", "error": True}
 
 # @app.post('/create-voice')
 # async def create_voice():
