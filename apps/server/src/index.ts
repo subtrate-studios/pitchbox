@@ -1,4 +1,5 @@
 import express, { type Express, type Request, type Response } from 'express';
+import cors from 'cors';
 
 import { DaytonaDeployer, DaytonaDeploymentError } from './DaytonaDeployer';
 import { SandboxRecorder } from './SandboxRecorder';
@@ -7,9 +8,15 @@ import { RepositoryCloner, RepositoryClonerError } from './RepositoryCloner';
 import { CodebaseAnalyzer } from './CodebaseAnalyzer';
 import { FlowExtractor } from './FlowExtractor';
 import { ScriptGenerator, ScriptGeneratorError } from './ScriptGenerator';
+import { ChromaDBClientManager } from './ChromaDBClient';
+import { VectorIndexer } from './VectorIndexer';
+import { RAGGenerator, RAGGeneratorError } from './RAGGenerator';
 
 const app: Express = express();
 const PORT = process.env.PORT || 3001;
+
+// Increase timeout for long-running analysis operations
+const ANALYSIS_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const recorder = new Recorder();
 const daytonaDeployer = new DaytonaDeployer(undefined, {
   defaultWorkspaceDir: process.env.DAYTONA_WORKSPACE_DIR,
@@ -21,6 +28,26 @@ const flowExtractor = new FlowExtractor();
 const scriptGenerator = process.env.ANTHROPIC_API_KEY
   ? new ScriptGenerator(process.env.ANTHROPIC_API_KEY)
   : null;
+
+// Initialize RAG components if both API keys are available
+let chromaClient: ChromaDBClientManager | null = null;
+let vectorIndexer: VectorIndexer | null = null;
+let ragGenerator: RAGGenerator | null = null;
+
+if (process.env.OPENAI_API_KEY && process.env.ANTHROPIC_API_KEY) {
+  try {
+    chromaClient = new ChromaDBClientManager({
+      host: process.env.CHROMA_HOST || 'localhost',
+      port: parseInt(process.env.CHROMA_PORT || '8000'),
+      openaiApiKey: process.env.OPENAI_API_KEY,
+    });
+    vectorIndexer = new VectorIndexer(chromaClient);
+    ragGenerator = new RAGGenerator(process.env.ANTHROPIC_API_KEY, vectorIndexer);
+    console.log('✅ RAG system initialized successfully');
+  } catch (error) {
+    console.warn('⚠️  Failed to initialize RAG system:', error);
+  }
+}
 
 type DeployRequestBody = {
   githubUrl?: string;
@@ -54,6 +81,12 @@ type AnalyzeRequestBody = {
   focusAreas?: string[];
   includeCodeExamples?: boolean;
 };
+
+// Enable CORS for Next.js frontend
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3002'], // Next.js ports
+  credentials: true,
+}));
 
 app.use(express.json());
 
@@ -178,6 +211,10 @@ app.post('/api/deploy', async (req: Request, res: Response) => {
 });
 
 app.post('/api/analyze', async (req: Request, res: Response) => {
+  // Set extended timeout for this endpoint (10 minutes)
+  req.setTimeout(ANALYSIS_TIMEOUT_MS);
+  res.setTimeout(ANALYSIS_TIMEOUT_MS);
+
   const {
     githubUrl,
     branch,
@@ -235,19 +272,50 @@ app.post('/api/analyze', async (req: Request, res: Response) => {
 
     console.log(`✅ Extracted ${flowResult.features.length} features and ${flowResult.userFlows.length} flows`);
 
-    // Step 4: Generate demo script
-    console.log(`✨ Generating demo script...`);
-    const demoScript = await scriptGenerator.generate(
-      analysis,
-      flowResult,
-      githubUrl,
-      {
-        style: style || 'business',
-        targetDuration: targetDuration || 180,
-        focusAreas: focusAreas || [],
-        includeCodeExamples: includeCodeExamples || false,
+    // Step 4: Index repository and generate demo script with RAG
+    let demoScript;
+    let collectionName: string | undefined;
+
+    if (ragGenerator && vectorIndexer) {
+      console.log(`🔎 Using RAG (Retrieval Augmented Generation)...`);
+
+      // Index the repository in vector database
+      console.log(`📊 Indexing repository in ChromaDB...`);
+      collectionName = await vectorIndexer.indexRepository(githubUrl, analysis, flowResult);
+      console.log(`✅ Repository indexed successfully`);
+
+      // Generate script using RAG
+      console.log(`✨ Generating demo script with RAG...`);
+      demoScript = await ragGenerator.generate(
+        collectionName,
+        githubUrl,
+        analysis,
+        flowResult,
+        {
+          style: style || 'business',
+          targetDuration: targetDuration || 180,
+          focusAreas: focusAreas || [],
+          includeCodeExamples: includeCodeExamples || false,
+        }
+      );
+    } else {
+      // Fallback to non-RAG generation
+      console.log(`✨ Generating demo script (non-RAG fallback)...`);
+      if (!scriptGenerator) {
+        throw new Error('Script generator not available');
       }
-    );
+      demoScript = await scriptGenerator.generate(
+        analysis,
+        flowResult,
+        githubUrl,
+        {
+          style: style || 'business',
+          targetDuration: targetDuration || 180,
+          focusAreas: focusAreas || [],
+          includeCodeExamples: includeCodeExamples || false,
+        }
+      );
+    }
 
     console.log(`✅ Demo script generated successfully`);
 
@@ -305,15 +373,25 @@ app.post('/api/analyze', async (req: Request, res: Response) => {
       return;
     }
 
-    if (error instanceof ScriptGeneratorError) {
-      res.status(500).json({
+    if (error instanceof ScriptGeneratorError || error instanceof RAGGeneratorError) {
+      console.error('Script generation failed:', error);
+      // Include the cause if available
+      const errorDetails: any = {
         error: error.message,
         code: 'SCRIPT_GENERATION_FAILED',
-      });
+      };
+      if (error.cause) {
+        console.error('Caused by:', error.cause);
+        errorDetails.details = error.cause instanceof Error ? error.cause.message : String(error.cause);
+      }
+      res.status(500).json(errorDetails);
       return;
     }
 
     console.error('Unexpected error during analysis:', error);
+    if (error instanceof Error) {
+      console.error('Error stack:', error.stack);
+    }
     res.status(500).json({
       error: 'An unexpected error occurred during repository analysis.',
       code: 'INTERNAL_ERROR',
@@ -321,10 +399,17 @@ app.post('/api/analyze', async (req: Request, res: Response) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
+  console.log(`⏱️  Analysis endpoint timeout: ${ANALYSIS_TIMEOUT_MS / 1000 / 60} minutes`);
   if (!scriptGenerator) {
     console.warn('⚠️  ANTHROPIC_API_KEY not configured. Script generation will be unavailable.');
   }
+  if (!ragGenerator) {
+    console.warn('⚠️  RAG system not available. Using basic script generation.');
+  }
 });
+
+// Set server-wide timeout
+server.timeout = ANALYSIS_TIMEOUT_MS;
 

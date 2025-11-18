@@ -59,7 +59,7 @@ export class ScriptGenerator {
       const prompt = this.buildPrompt(analysis, flowResult, repoUrl, options);
 
       const response = await this.anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5-20250929',
         max_tokens: 4096,
         temperature: 0.7,
         messages: [
@@ -108,53 +108,78 @@ export class ScriptGenerator {
 
     const context = this.buildContext(analysis, flowResult);
 
-    return `You are a professional product demo script writer. Your task is to create an engaging, natural-sounding demo script for a text-to-speech system (ElevenLabs) that will be used to demonstrate a software product.
+    return `You are a professional product demo voiceover script writer. Create a concise, punchy script for a ${targetDuration}-second product demo video.
 
-# Repository Information
-- URL: ${repoUrl}
+CRITICAL: This script will be read aloud by text-to-speech (ElevenLabs) WHILE a screen recording plays. The visuals will show what you're describing, so you DON'T need to explain every detail.
+
+# Product Context
+- Repository: ${repoUrl}
 - Tech Stack: ${analysis.techStack.languages.join(', ')}
-- Frameworks: ${analysis.techStack.frameworks.join(', ') || 'None detected'}
-- Total Files: ${analysis.totalFiles}
+- Frameworks: ${analysis.techStack.frameworks.join(', ') || 'None'}
+${focusAreas.length > 0 ? `- Focus On: ${focusAreas.join(', ')}` : ''}
 
 # Project Context
 ${context}
 
-# Script Requirements
-- Style: ${style} (${this.getStyleDescription(style)})
-- Target Duration: ${targetDuration} seconds
-- Tone: Conversational, engaging, and easy to understand when spoken aloud
-${focusAreas.length > 0 ? `- Focus Areas: ${focusAreas.join(', ')}` : ''}
+# VOICEOVER SCRIPT RULES (CRITICAL)
 
-# Instructions
-1. Create a compelling demo script that showcases the product's key features and value proposition
-2. Structure the script in clear sections: Introduction, Key Features (3-5), User Flow, and Conclusion
-3. Write in a natural, conversational tone suitable for voice narration
-4. Include natural pauses and transitions
-5. Avoid technical jargon unless style is "technical"
-6. Make it engaging and highlight what makes this product special
-7. Each section should have a clear purpose and flow naturally into the next
+1. **BE CONCISE**: Maximum ${targetDuration} seconds. Aim for ~${Math.floor(targetDuration * 2.5)} words total (150 words/minute pace).
 
-# Output Format
-Structure your response as follows:
+2. **NARRATE, DON'T EXPLAIN**:
+   - BAD: "First, you'll click on the login button, then enter your credentials, and the system will authenticate you"
+   - GOOD: "Login is simple and secure"
+
+3. **COMPLEMENT THE VISUALS**: The screen recording shows the UI. You provide the "why" and "what", not the "how".
+
+4. **SHORT, PUNCHY SENTENCES**: 5-10 words max per sentence. Easy to speak naturally.
+
+5. **NO FILLER**: Cut "you can see", "as you can notice", "let me show you". Just state the value.
+
+6. **FOCUS ON BENEFITS**: What problem does it solve? Why does it matter?
+
+# Structure (Keep sections SHORT)
+
+## INTRODUCTION (15-20 seconds)
+- Hook: One sentence problem statement
+- Solution: What this product is in ONE sentence
+- Promise: What we'll show today
+
+## FEATURE: [Name] (20-30 seconds)
+- What it does (1 sentence)
+- Why it matters (1 sentence)
+- Key benefit (1 sentence)
+
+## FEATURE: [Name] (20-30 seconds)
+[Same structure - pick only 2-3 TOP features, not all of them]
+
+## CONCLUSION (15-20 seconds)
+- Recap value in ONE sentence
+- Call-to-action
+
+# Style: ${this.getStyleDescription(style)}
+
+# Example Length (for ${targetDuration}s):
+- Introduction: ~40 words
+- Feature 1: ~50 words
+- Feature 2: ~50 words
+- Conclusion: ~30 words
+- Total: ~170 words MAX
+
+OUTPUT FORMAT:
 
 ## INTRODUCTION
-[Opening that hooks the audience and explains what the product is]
+[Hook + solution + promise in 2-3 sentences max]
 
-## FEATURE: [Feature Name]
-[Explain the feature in an engaging way]
+## FEATURE: [Name]
+[3-4 sentences max, focus on value not process]
 
-## FEATURE: [Feature Name]
-[Explain the feature in an engaging way]
-
-[... more features ...]
-
-## USER FLOW: [Flow Name]
-[Walk through a typical user journey]
+## FEATURE: [Name]
+[3-4 sentences max]
 
 ## CONCLUSION
-[Wrap up with value proposition and call-to-action]
+[2-3 sentences: recap + CTA]
 
-Remember: This will be read aloud by a text-to-speech system, so write it as you would speak it. Use short sentences, active voice, and natural language.`;
+WRITE NOW. Keep it under ${Math.floor(targetDuration * 2.5)} words total.`;
   }
 
   private getStyleDescription(style: string): string {

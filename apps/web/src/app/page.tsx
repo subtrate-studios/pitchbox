@@ -15,46 +15,12 @@ export default function Home() {
     appBuildCommand: '',
   });
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [response, setResponse] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError(null);
-    setResponse(null);
 
-    try {
-      const payload: any = { githubUrl: formData.githubUrl };
-
-      if (formData.branch) payload.branch = formData.branch;
-      if (formData.commitId) payload.commitId = formData.commitId;
-      if (formData.workspaceDir) payload.workspaceDir = formData.workspaceDir;
-      if (formData.skipSetup) payload.skipSetup = formData.skipSetup;
-      if (formData.sandboxPort) payload.sandboxPort = parseInt(formData.sandboxPort);
-      if (formData.sandboxRecordDurationMs) payload.sandboxRecordDurationMs = parseInt(formData.sandboxRecordDurationMs);
-      if (formData.appStartCommand) payload.appStartCommand = formData.appStartCommand;
-      if (formData.appBuildCommand) payload.appBuildCommand = formData.appBuildCommand;
-
-      const res = await fetch('/api/deploy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Deployment failed');
-      }
-
-      setResponse(data);
-    } catch (err: any) {
-      setError(err.message || 'An error occurred');
-    } finally {
-      setIsLoading(false);
-    }
+    // Store form data and redirect to analyze page
+    sessionStorage.setItem('deploymentConfig', JSON.stringify(formData));
+    window.location.href = '/analyze';
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,10 +37,10 @@ export default function Home() {
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-primary-400 mb-4">
-            Daytona Deployer
+            PitchBox
           </h1>
           <p className="text-lg text-slate-600 dark:text-slate-400">
-            Deploy your GitHub repository to Daytona with ease
+            Generate AI-powered demo scripts for your GitHub projects
           </p>
         </div>
 
@@ -246,58 +212,17 @@ export default function Home() {
             <div className="pt-4">
               <button
                 type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white font-semibold py-4 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                className="w-full bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white font-semibold py-4 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center space-x-2"
               >
-                {isLoading ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Deploying...</span>
-                  </>
-                ) : (
-                  <span>Deploy to Daytona</span>
-                )}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Generate Script</span>
               </button>
             </div>
           </form>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-8">
-            <div className="flex items-start">
-              <svg className="h-5 w-5 text-red-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Error</h3>
-                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Success Response */}
-        {response && (
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6">
-            <div className="flex items-start">
-              <svg className="h-6 w-6 text-green-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <div className="ml-3 flex-1">
-                <h3 className="text-lg font-medium text-green-800 dark:text-green-200">Deployment Successful!</h3>
-                <div className="mt-3 text-sm text-green-700 dark:text-green-300">
-                  <pre className="bg-green-100 dark:bg-green-900/40 p-4 rounded-lg overflow-x-auto">
-                    {JSON.stringify(response, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </main>
   );

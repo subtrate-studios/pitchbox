@@ -216,6 +216,64 @@ curl -X POST http://localhost:3001/api/deploy \
 
 Use optional `commitId` to pin to a specific SHA, `workspaceDir` to override the default clone root, and `skipSetup` to opt out of automatic dependency installation. The endpoint responds once the sandbox boots, the repo is cloned, and setup commands succeed; failures are surfaced with structured Daytona error codes.
 
+#### Repository Analysis API (NEW!)
+
+**POST `/api/analyze`** - AI-powered repository analysis with RAG (Retrieval Augmented Generation)
+
+Analyzes a GitHub repository and generates a professional product demo script using:
+- 🧠 **ChromaDB**: Vector database for semantic search
+- 🔍 **OpenAI Embeddings**: Converts code to semantic vectors
+- ✨ **Claude AI**: Generates natural demo scripts
+- 🎯 **RAG**: Retrieves relevant code context for accurate generation
+
+**Quick Start:**
+
+```bash
+# 1. Start ChromaDB
+docker-compose up -d
+
+# 2. Configure environment
+cp apps/server/.env.example apps/server/.env
+# Add OPENAI_API_KEY and ANTHROPIC_API_KEY
+
+# 3. Start server
+cd apps/server && npm run dev
+```
+
+**Request:**
+
+```bash
+curl -X POST http://localhost:3001/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "githubUrl": "https://github.com/vercel/next.js",
+    "style": "business",
+    "targetDuration": 180,
+    "focusAreas": ["routing", "data-fetching"]
+  }'
+```
+
+**Parameters:**
+- `githubUrl` (required): GitHub repository URL
+- `branch` (optional): Branch to analyze
+- `style` (optional): `business` | `technical` | `casual`
+- `targetDuration` (optional): Script duration in seconds (default: 180)
+- `focusAreas` (optional): Areas to emphasize in script
+- `retrievalCount` (optional): Number of relevant docs to retrieve (default: 20)
+
+**Response:**
+
+Returns comprehensive analysis including:
+- 📊 Tech stack detection (languages, frameworks, tools)
+- 🎯 Features and user flows
+- 🔌 API endpoints
+- 🧩 UI components and data models
+- 📝 AI-generated demo script (optimized for text-to-speech)
+
+**See also:**
+- [RAG Setup Guide](./RAG_SETUP.md) - Detailed RAG documentation
+- [Server README](./apps/server/README.md) - Complete API reference
+
 ## Workspace Scripts
 
 All scripts can be run from the root:
@@ -227,4 +285,66 @@ All scripts can be run from the root:
 - `npm run dev:server` - Start only the server
 - `npm run build:web` - Build only the web app
 - `npm run build:server` - Build only the server
+
+## RAG System (Retrieval Augmented Generation)
+
+Pitchbox now includes a powerful RAG system for enhanced repository analysis:
+
+### What is RAG?
+
+RAG combines vector search with AI generation:
+1. **Index**: Code is converted to embeddings and stored in ChromaDB
+2. **Retrieve**: Semantic search finds relevant code snippets
+3. **Generate**: Claude uses retrieved context to create accurate scripts
+
+### Benefits
+
+- ✅ Handles repositories of any size (1000+ files)
+- ✅ Semantic search (meaning, not just keywords)
+- ✅ More accurate understanding of codebase
+- ✅ Better demo scripts with specific examples
+- ✅ Finds code even with different terminology
+
+### Quick Setup
+
+```bash
+# Start ChromaDB + Server
+./start-rag.sh
+```
+
+Or manually:
+
+```bash
+# 1. Start ChromaDB
+docker-compose up -d
+
+# 2. Add API keys to apps/server/.env
+OPENAI_API_KEY=sk-proj-xxxxx
+ANTHROPIC_API_KEY=sk-ant-xxxxx
+
+# 3. Install & run
+cd apps/server
+npm install
+npm run dev
+```
+
+### Architecture
+
+```
+GitHub Repo → Clone → Analyze → Index in ChromaDB
+                                      ↓
+                            Semantic Search (OpenAI)
+                                      ↓
+                        Claude AI + Retrieved Context
+                                      ↓
+                            Demo Script Output
+```
+
+### Cost Estimates
+
+- OpenAI Embeddings: ~$0.001 per repo
+- Claude Generation: ~$0.05-0.15 per script
+- **Total: ~$0.05-0.16 per analysis**
+
+For more details, see [RAG Setup Guide](./RAG_SETUP.md)
 
